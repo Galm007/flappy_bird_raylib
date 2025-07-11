@@ -11,9 +11,6 @@ int animation_frame = 0;
 Texture2D birdtex[9];
 Sound wingfx, hitfx, diefx;
 
-// TODO: 
-// - Turn bird.tex into a non-member of Bird
-
 Bird bird_new() {
 	Bird bird = {
 		.pos = (Vector2) { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f },
