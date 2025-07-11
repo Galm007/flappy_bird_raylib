@@ -13,7 +13,7 @@ Sound wingfx, hitfx, diefx;
 
 Bird bird_new() {
 	Bird bird = {
-		.pos = (Vector2) { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f },
+		.pos = (Vector2) { SCREEN_WIDTH / 4.0f, SCREEN_HEIGHT / 2.0f },
 		.vely = 0.0f,
 		.rot = 0.0f,
 		.alive = true,

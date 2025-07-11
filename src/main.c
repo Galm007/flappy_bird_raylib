@@ -71,9 +71,6 @@ int main() {
 	initialize_pipes();
 	Bird bird = bird_new();
 
-	// the time between each awarded point is constant
-	const float point_interval = PIPE_SPREAD / SCROLL_SPEED;
-
 	while (!WindowShouldClose()) {
 		float ft = GetFrameTime();
 
@@ -107,7 +104,7 @@ int main() {
 			else if (state == GET_READY) {
 				state = PLAYING;
 				score = 0;
-				point_timer = point_interval;
+				point_timer = (pipes[0].x - bird.pos.x) / SCROLL_SPEED;
 			}
 		}
 
@@ -133,7 +130,7 @@ int main() {
 			// point timer
 			point_timer -= ft;
 			if (point_timer <= 0.0f) {
-				point_timer += point_interval;
+				point_timer += PIPE_SPREAD / SCROLL_SPEED;
 				score++;
 				PlaySound(pointfx);
 			}
@@ -164,11 +161,11 @@ int main() {
 		DrawTexture(groundtex, ground_posx, groundy, WHITE);
 		DrawTexture(groundtex, ground_posx + groundtex.width, groundy, WHITE);
 
-		// draw bird
-		bird_draw(&bird);
-
-		if (state != GET_READY)
+		// draw bird and score
+		if (state != GET_READY) {
+			bird_draw(&bird);
 			render_score(numbertex);
+		}
 
 		// draw UI
 		float y_offset = transition_time * SCREEN_HEIGHT * 4.0f;
