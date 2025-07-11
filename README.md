@@ -1,4 +1,4 @@
-# flappy_bird_c
+# flappy_bird_raylib
 Flappy bird game made with the Raylib library complete with sound effects, animations, game over screen, and changing background colors and bird skins, written in C.
 
 
