@@ -132,7 +132,6 @@ int main() {
 		{
 			// point timer
 			point_timer -= ft;
-			const float point_interval = PIPE_SPREAD / SCROLL_SPEED;
 			if (point_timer <= 0.0f) {
 				point_timer += point_interval;
 				score++;
