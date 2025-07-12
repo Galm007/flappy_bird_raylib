@@ -53,6 +53,8 @@ void bird_update(float ft, Bird* bird) {
 		bird->vely += GRAVITY * ft;
 		bird->pos.y += bird->vely * ft;
 		bird->rot = bird->vely * 0.05f;
+		if (bird->pos.y < 0.0f)
+			bird->pos.y = 0.0f;
 	}
 
 	// keep the bird on the ground when dead
