@@ -2,7 +2,8 @@
 Flappy bird game made with the Raylib library complete with sound effects, animations, game over screen, and changing background colors and bird skins, written in C.
 
 
-https://github.com/user-attachments/assets/34bc6bca-e747-4d07-a946-8c5a8b3d4eb8
+https://github.com/user-attachments/assets/b1763b37-b454-4fa4-b008-cc4c05c576f2
+
 
 How to run:
 ```
