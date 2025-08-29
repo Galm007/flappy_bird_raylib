@@ -33,6 +33,15 @@ Rectangle get_collider(Vector2 pos, Texture2D* tex) {
 	};
 }
 
+// checks if two rectangles intersect
+bool is_colliding(Rectangle r1, Rectangle r2) {
+	bool i1 = r2.x - r1.x < r1.width;
+	bool i2 = r1.x - r2.x < r2.width;
+	bool i3 = r2.y - r1.y < r1.height;
+	bool i4 = r1.y - r2.y < r2.height;
+	return i1 && i2 && i3 && i4;
+}
+
 void render_score(Texture2D numbertex[10]) {
 	int count = 0;
 	int ones = 0; // keep track of ones because they have different width
