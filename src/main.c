@@ -3,17 +3,25 @@
 #include "sprite.h"
 #include "bird.h"
 #include "pipes.h"
+#include "nn.h"
 
 #include <raylib.h>
 #include <raymath.h>
 #include <stdio.h>
 
-enum GameState state = GET_READY;
-float flash_alpha = 0.0f;
-float transition_time = 0.0f;
+/*
+ * Inputs:
+ * - next pipe ypos (ratio to window height)
+ * - bird ypos (ratio to window height)
+ * - next pipe xdistance (ratio to pipe spread)
+ *
+ * NN Structure:
+ * 3x2x2x2
+ * Flap if the first output node is greater than the second output node
+ */
+
 float point_timer = 0.0f;
 unsigned int score = 0;
-bool flap_key_presssed = false;
 int bg_skin = 0;
 
 int main() {
@@ -31,8 +39,6 @@ int main() {
 		LoadTexture("../assets/sprites/pipe-red.png")
 	};
 	Texture2D groundtex = LoadTexture("../assets/sprites/base.png");
-	Texture2D gameovertex = LoadTexture("../assets/sprites/gameover.png");
-	Texture2D getreadytex = LoadTexture("../assets/sprites/message.png");
 	Texture2D numbertex[10];
 	{
 		char filename[64];
@@ -56,94 +62,81 @@ int main() {
 	Sound swooshfx = LoadSound("../assets/audio/swoosh.ogg");
 	wingfx = LoadSound("../assets/audio/wing.ogg");
 	hitfx = LoadSound("../assets/audio/hit.ogg");
-	diefx = LoadSound("../assets/audio/die.ogg");
-
-	// generate white flash texture
-	Texture2D whitetex;
-	{
-		Image whiteimg = LoadImageFromTexture(bgtex[0]);
-		ImageClearBackground(&whiteimg, WHITE);
-		whitetex = LoadTextureFromImage(whiteimg);
-		UnloadImage(whiteimg);
-	}
 
 	// initialize entities
+	Bird population[POPULATION];
+	NeuralNetwork nn[POPULATION];
+	for (int i = 0; i < POPULATION; i++) {
+		population[i] = bird_new();
+		nn_new(&nn[i]);
+	}
 	initialize_pipes();
-	Bird bird = bird_new();
 
+	point_timer = (pipes[0].x - population[0].pos.x) / SCROLL_SPEED;
+	int gen = 0;
 	while (!WindowShouldClose()) {
 		float ft = GetFrameTime();
-
-		// input handling
-		flap_key_presssed = IsKeyPressed(KEY_SPACE)
-			|| IsKeyPressed(KEY_UP)
-			|| IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-
-		// death flash
-		flash_alpha -= ft;
-		if (flash_alpha < 0.0f)
-			flash_alpha = 0.0f;
-
-		// state management
-		if (state == TRANSITION) {
-			transition_time -= ft;
-			if (transition_time <= 0.0f)
-				state = GAME_OVER;
-			PlaySound(swooshfx);
-		}
-		if (flap_key_presssed) {
-			if (state == GAME_OVER) {
-				state = GET_READY;
-				bird.pos.y = SCREEN_HEIGHT / 2.0f;
-				bird.rot = 0.0f;
-				bird.alive = true;
-				bird.skin = (bird.skin + 1) % 3;
-				bg_skin = !bg_skin;
-				initialize_pipes();
-			}
-			else if (state == GET_READY) {
-				state = PLAYING;
-				score = 0;
-				point_timer = (pipes[0].x - bird.pos.x) / SCROLL_SPEED;
-			}
-		}
-
+		
+		// bg movement
 		static float bg_posx = 0.0f;
+		bg_posx -= SCROLL_SPEED * ft * 0.5f;
+		if (bg_posx < -SCREEN_WIDTH)
+			bg_posx += SCREEN_WIDTH;
+	
+		// ground movement
 		static float ground_posx = 0.0f;
-		if (state == PLAYING || state == GET_READY) {
-			// bg movement
-			bg_posx -= SCROLL_SPEED * ft * 0.5f;
-			if (bg_posx < -SCREEN_WIDTH)
-				bg_posx += SCREEN_WIDTH;
-
-			// ground movement
-			ground_posx -= SCROLL_SPEED * ft;
-			if (ground_posx < -SCREEN_WIDTH)
-				ground_posx += SCREEN_WIDTH;
-		}
+		ground_posx -= SCROLL_SPEED * ft;
+		if (ground_posx < -SCREEN_WIDTH)
+			ground_posx += SCREEN_WIDTH;
 
 		// move bird
-		bird_update(ft, &bird);
+		Vector2 p = next_pipe();
+		for (int i = 0; i < POPULATION; i++) {
+			if (!population[i].alive)
+				continue;
 
-		if (state == PLAYING)
-		{
-			// point timer
-			point_timer -= ft;
-			if (point_timer <= 0.0f) {
-				point_timer += PIPE_SPREAD / SCROLL_SPEED;
-				score++;
-				PlaySound(pointfx);
+			float nn_inputs[3] = {
+				p.y / SCREEN_HEIGHT,
+				population[i].pos.y / SCREEN_HEIGHT,
+				fabsf(p.x - population[i].pos.x) / SCREEN_WIDTH
+			};
+			if (nn_feedforward(&nn[i], nn_inputs) > 0.0f)
+				bird_flap(&population[i]);
+			bird_update(ft, &population[i]);
+		}
+
+		// point timer
+		point_timer -= ft;
+		if (point_timer <= 0.0f) {
+			point_timer += PIPE_SPREAD / SCROLL_SPEED;
+			score++;
+			PlaySound(pointfx);
+		}
+
+		// move pipes and check for bird-pipe collision
+		bool all_dead = true;
+		move_pipes(ft, &pipetex[bg_skin]);
+		for (int i = 0; i < POPULATION; i++) {
+			if (population[i].alive) {
+				collide_pipes(&population[i], &pipetex[bg_skin]);
+				all_dead = false;
 			}
-			
-			// get bird hitbox
-			Rectangle bird_col = get_collider(bird.pos, &birdtex[0]);
+		}
 
-			// move pipes and check for bird-pipe collision
-			update_pipes(ft, &bird, &pipetex[bg_skin]);
+		// prepare next generation
+		if (all_dead) {
+			// genetic crossover
+			bird_sort(population, nn);
+			nn_cross_multiple(nn, 24);
+			printf("gen %d: %f\n", gen++, population[0].score);
 
-			// kill bird if it touched ground
-			if (bird.alive && bird_col.y + bird_col.height / 2.0f > SCREEN_HEIGHT - GROUND_HEIGHT)
-				bird_kill(&bird);
+			// reset
+			for (int i = 0; i < POPULATION; i++)
+				population[i] = bird_new();
+			initialize_pipes();
+			point_timer = (pipes[0].x - population[0].pos.x) / SCROLL_SPEED;
+			score = 0;
+			bg_skin = !bg_skin;
 		}
 
 		BeginDrawing();
@@ -162,48 +155,37 @@ int main() {
 		DrawTexture(groundtex, ground_posx + groundtex.width, groundy, WHITE);
 
 		// draw bird and score
-		if (state != GET_READY) {
-			bird_draw(&bird);
-			render_score(numbertex);
-		}
+		for (int i = 0; i < POPULATION; i++)
+			if (population[i].alive)
+				bird_draw(&population[i]);
+		if (population[0].alive)
+			bird_draw(&population[0]);
+		render_score(numbertex);
 
-		// draw UI
-		float y_offset = transition_time * SCREEN_HEIGHT * 4.0f;
-		if (state == TRANSITION || state == GAME_OVER)
-			DrawTexture(
-				gameovertex,
-				(SCREEN_WIDTH - gameovertex.width) / 2.0f,
-				(SCREEN_HEIGHT - gameovertex.height) / 2.0f + y_offset,
-				WHITE);
-		else if (state == GET_READY)
-			DrawTexture(
-				getreadytex,
-				(SCREEN_WIDTH - getreadytex.width) / 2.0f,
-				(SCREEN_HEIGHT - getreadytex.height) / 2.0f,
-				WHITE);
-
-		// death flash
-		DrawTexture(whitetex, 0, 0, ColorAlpha(WHITE, flash_alpha));
+		// additional text about AI
+		char help_text[64];
+		sprintf(help_text, "Gen: %d", gen); 
+		DrawText(help_text, 5, SCREEN_HEIGHT - 23, 20, BLACK);
 
 		EndDrawing();
 	}
 
-	bird_free(&bird);
+	for (int i = 0; i < POPULATION; i++) {
+		bird_free(&population[i]);
+		nn_free(&nn[i]);
+	}
 
 	UnloadSound(pointfx);
 	UnloadSound(swooshfx);
 	UnloadSound(wingfx);
 	UnloadSound(hitfx);
-	UnloadSound(diefx);
 
 	UnloadTexture(bgtex[0]);
 	UnloadTexture(bgtex[1]);
 	UnloadTexture(pipetex[0]);
 	UnloadTexture(pipetex[1]);
 	UnloadTexture(groundtex);
-	UnloadTexture(whitetex);
-	UnloadTexture(gameovertex);
-	UnloadTexture(getreadytex);
+
 	for (int i = 0; i < 9; i++)
 		UnloadTexture(birdtex[i]);
 
